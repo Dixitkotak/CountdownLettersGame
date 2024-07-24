@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 
 namespace CountdownGame
@@ -8,6 +11,14 @@ namespace CountdownGame
     {
         static async Task Main(string[] args)
         {
+            Console.WriteLine("Please wait.....");
+            var wordsDictionary = await GetWordsDictionaryAsync();
+            if (wordsDictionary == null)
+            {
+                Console.WriteLine("Failed to load the words dictionary.");
+                return;
+            }
+            Console.Clear();
             int totalScore = 0;
 
             for (int round = 1; round <= 4; round++)
@@ -16,7 +27,7 @@ namespace CountdownGame
                 List<char> letters = GetLetters();
                 Console.WriteLine("Letters: " + string.Join(" ", letters));
 
-                string longestWord =await FindLongestWordAsync(letters);
+                string longestWord = FindLongestWord(letters, wordsDictionary);
                 int score = longestWord.Length;
                 totalScore += score;
 
@@ -59,28 +70,41 @@ namespace CountdownGame
             return letters;
         }
 
-        static async Task<string> FindLongestWordAsync(List<char> letters)
+        static async Task<Dictionary<string, int>> GetWordsDictionaryAsync()
         {
-            string letterString = new string(letters.ToArray());
             string apiUrl = "https://raw.githubusercontent.com/dwyl/english-words/master/words_dictionary.json";
 
             using (HttpClient client = new HttpClient())
             {
                 HttpResponseMessage response = await client.GetAsync(apiUrl);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    return null;
+                }
 
                 string responseBody = await response.Content.ReadAsStringAsync();
-                var wordsDictionary = JsonConvert.DeserializeObject<Dictionary<string, int>>(responseBody);
-
-                var validWords = wordsDictionary.Keys
-                    .Where(word => word.Length > 1) // Filtering out very short words
-                    .Where(word => CanFormWord(word, letters))
-                    .OrderByDescending(word => word.Length)
-                    .ToList();
-
-                string longestWord = validWords.FirstOrDefault();
-                return longestWord ?? "";
+                return JsonConvert.DeserializeObject<Dictionary<string, int>>(responseBody);
             }
+        }
+
+        static string FindLongestWord(List<char> letters, Dictionary<string, int> wordsDictionary)
+        {
+            // Filter words: only include those longer than 1 character
+            var validWords = wordsDictionary.Keys
+                .Where(word => word.Length > 1)
+                .OrderByDescending(word => word.Length)
+                .ToList();
+
+            // Check each word in descending order of length
+            foreach (var word in validWords)
+            {
+                if (CanFormWord(word, letters))
+                {
+                    return word;
+                }
+            }
+
+            return "";
         }
 
         static bool CanFormWord(string word, List<char> letters)
