@@ -7,121 +7,99 @@ using Newtonsoft.Json;
 
 namespace CountdownGame
 {
-    class Program
+    public class Program
     {
-        static async Task Main(string[] args)
+        private const string Consonants = "BCDFGHJKLMNPQRSTVWXYZ";
+        private const string Vowels = "AEIOU";
+        private const int TotalRounds = 4;
+        private const int TotalLetters = 9;
+        private static readonly HttpClient HttpClient = new HttpClient();
+        private static readonly Random Random = new Random();
+
+        public static async Task Main(string[] args)
         {
             Console.WriteLine("Please wait.....");
-            var wordsDictionary = await GetWordsDictionaryAsync();
+            var wordsDictionary = await FetchWordsDictionaryAsync();
             if (wordsDictionary == null)
             {
                 Console.WriteLine("Failed to load the words dictionary.");
                 return;
             }
-            Console.Clear();
-            int totalScore = 0;
 
-            for (int round = 1; round <= 4; round++)
+            int totalScore = 0;
+            for (int round = 1; round <= TotalRounds; round++)
             {
                 Console.WriteLine($"Round {round}:");
-                List<char> letters = GetLetters();
+                List<char> letters = GenerateLetters();
                 Console.WriteLine("Letters: " + string.Join(" ", letters));
 
                 string longestWord = FindLongestWord(letters, wordsDictionary);
                 int score = longestWord.Length;
                 totalScore += score;
 
-                Console.WriteLine($"Longest Word: {longestWord}, Score: {score}");
-                Console.WriteLine();
+                Console.WriteLine($"Longest Word: {longestWord}, Score: {score}\n");
             }
 
             Console.WriteLine($"Total Score: {totalScore}");
         }
 
-        static List<char> GetLetters()
+        public static List<char> GenerateLetters()
         {
             List<char> letters = new List<char>();
-            Random rand = new Random();
-            string consonants = "BCDFGHJKLMNPQRSTVWXYZ";
-            string vowels = "AEIOU";
+            for (int i = 0; i < TotalLetters; i++)
+            {
+                char choice = GetLetterChoice();
+                letters.Add(choice == 'C' ? Consonants[Random.Next(Consonants.Length)] : Vowels[Random.Next(Vowels.Length)]);
+                Console.WriteLine("Letters: " + string.Join(" ", letters));
+            }
+            return letters;
+        }
 
-            for (int i = 0; i < 9; i++)
+        public static char GetLetterChoice()
+        {
+            while (true)
             {
                 Console.Write("Choose (C)onsonant or (V)owel: ");
                 char choice = char.ToUpper(Console.ReadKey().KeyChar);
                 Console.WriteLine();
-
-                if (choice == 'C')
-                {
-                    letters.Add(consonants[rand.Next(consonants.Length)]);
-                }
-                else if (choice == 'V')
-                {
-                    letters.Add(vowels[rand.Next(vowels.Length)]);
-                }
-                else
-                {
-                    i--; // invalid choice, redo the iteration
-                    Console.WriteLine("Invalid choice, try again.");
-                }
-                Console.WriteLine("Letters: " + string.Join(" ", letters));
+                if (choice == 'C' || choice == 'V') return choice;
+                Console.WriteLine("Invalid choice, try again.");
             }
-
-            return letters;
         }
 
-        static async Task<Dictionary<string, int>> GetWordsDictionaryAsync()
+        public static async Task<Dictionary<string, int>> FetchWordsDictionaryAsync()
         {
-            string apiUrl = "https://raw.githubusercontent.com/dwyl/english-words/master/words_dictionary.json";
-
-            using (HttpClient client = new HttpClient())
+            const string apiUrl = "https://raw.githubusercontent.com/dwyl/english-words/master/words_dictionary.json";
+            try
             {
-                HttpResponseMessage response = await client.GetAsync(apiUrl);
-                if (!response.IsSuccessStatusCode)
-                {
-                    return null;
-                }
-
-                string responseBody = await response.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<Dictionary<string, int>>(responseBody);
+                HttpResponseMessage response = await HttpClient.GetAsync(apiUrl);
+                response.EnsureSuccessStatusCode();
+                string json = await response.Content.ReadAsStringAsync();
+                return JsonConvert.DeserializeObject<Dictionary<string, int>>(json);
+            }
+            catch
+            {
+                return null;
             }
         }
 
-        static string FindLongestWord(List<char> letters, Dictionary<string, int> wordsDictionary)
+        public static string FindLongestWord(List<char> letters, Dictionary<string, int> wordsDictionary)
         {
-            // Filter words: only include those longer than 1 character
-            var validWords = wordsDictionary.Keys
-                .Where(word => word.Length > 1)
+            return wordsDictionary.Keys
+                .Where(word => word.Length > 1 && CanFormWord(word, letters))
                 .OrderByDescending(word => word.Length)
-                .ToList();
-
-            // Check each word in descending order of length
-            foreach (var word in validWords)
-            {
-                if (CanFormWord(word, letters))
-                {
-                    return word;
-                }
-            }
-
-            return "";
+                .FirstOrDefault() ?? string.Empty;
         }
 
-        static bool CanFormWord(string word, List<char> letters)
+        public static bool CanFormWord(string word, List<char> letters)
         {
             int[] charCount = new int[26];
             foreach (var letter in letters)
-            {
                 charCount[letter - 'A']++;
-            }
 
-            foreach (var letter in word)
-            {
-                if (--charCount[letter - 'a'] < 0)
-                {
+            foreach (var letter in word.ToUpper())
+                if (--charCount[letter - 'A'] < 0)
                     return false;
-                }
-            }
 
             return true;
         }
